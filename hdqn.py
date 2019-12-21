@@ -232,9 +232,14 @@ for t in range(MAX_STEPS):
     hl_replay_buffer.push(state, sub_goal_i, next_state, extrinsic_reward, done)
     state = next_state
 
+    ll_model_target.load_state_dict(ll_model.state_dict())
+    hl_model_target.load_state_dict(hl_model.state_dict())
+
     if done:
         state_env = env.reset()
         state = state_process(state_env, goal_pose, env.agent_pos)
+        ll_model_target.load_state_dict(ll_model.state_dict())
+        hl_model_target.load_state_dict(hl_model.state_dict())
         done = False
         rewards.append(episode_reward)
         episode_reward = 0

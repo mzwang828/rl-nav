@@ -21,10 +21,10 @@ import matplotlib.pyplot as plt
 from misc_utils import one_hot, Transition, ReplayMemory
 
 # Hyper Parameters
-BATCH_SIZE = 128
+BATCH_SIZE = 64             #128
 LR = 1e-5                   # learning rate
 GAMMA = 0.99                 # reward discount
-MEMORY_CAPACITY = 8000
+MEMORY_CAPACITY = 10000     #8000
 MAX_EPISODES = 3000
 MAX_STEPS = int(1e5)
 UPDATE_EVERY = int(100)
@@ -100,6 +100,7 @@ def update(model, target_model, optimizer, replay_buffer, batch_size):
     action     = torch.Tensor(one_hot(np.array(batch.action), num_classes=7))
     reward     = torch.Tensor(batch.reward)
     done       = torch.Tensor(batch.done)
+    print(batch.done)
 
     q_value    = (model(image, data) * action).sum(dim=-1)
         
