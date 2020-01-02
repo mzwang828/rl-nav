@@ -100,10 +100,9 @@ def update(model, target_model, optimizer, replay_buffer, batch_size):
     action     = torch.Tensor(one_hot(np.array(batch.action), num_classes=7))
     reward     = torch.Tensor(batch.reward)
     done       = torch.Tensor(batch.done)
-    print(batch.done)
 
     q_value    = (model(image, data) * action).sum(dim=-1)
-        
+
     next_q_value     = target_model(next_image, next_data).max(1)[0].detach()
     
     next_q_value = reward + GAMMA * next_q_value * (1 - done)
