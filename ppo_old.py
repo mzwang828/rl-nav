@@ -15,7 +15,7 @@ from torch.distributions.categorical import Categorical
 from IPython.display import clear_output
 import matplotlib.pyplot as plt
 
-from misc_utils import one_hot, Transition, ReplayMemory
+from common.misc_utils import one_hot, Transition, ReplayMemory
 from common.multiprocessing_env import ParallelEnv
 
 # Hyper Parameters

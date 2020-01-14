@@ -18,7 +18,7 @@ from torch.utils.tensorboard import SummaryWriter
 from IPython.display import clear_output
 import matplotlib.pyplot as plt
 
-from misc_utils import one_hot, Transition, ReplayMemory
+from common.misc_utils import one_hot, Transition, ReplayMemory
 
 # Hyper Parameters
 BATCH_SIZE = 64             #128
