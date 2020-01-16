@@ -3,7 +3,7 @@ import torch
 from common.multiprocessing_env import ParallelEnv
 
 class PPOAlgo:
-    def __init__(self, envs, acmodel, device=None, num_frames_per_proc=None, preprocess_obss=None,
+    def __init__(self, envs, acmodel, optimizer = None, device=None, num_frames_per_proc=None, preprocess_obss=None,
                  discount=0.99, lr=0.001, gae_lambda=0.95, entropy_coef=0.01, value_loss_coef=0.5, 
                  max_grad_norm=0.5, recurrence=4, adam_eps=1e-8, clip_eps=0.2, epochs=4, batch_size=256, 
                  reshape_reward=None):
@@ -30,7 +30,10 @@ class PPOAlgo:
 
         assert self.batch_size % self.recurrence == 0
 
-        self.optimizer = torch.optim.Adam(self.acmodel.parameters(), lr, eps=adam_eps)
+        if optimizer == None:
+            self.optimizer = torch.optim.Adam(self.acmodel.parameters(), lr, eps=adam_eps)
+        else:
+            self.optimizer = optimizer
         self.batch_num = 0
 
         self.state = self.envs.reset()

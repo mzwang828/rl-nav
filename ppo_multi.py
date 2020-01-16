@@ -1,6 +1,5 @@
 import math
 import random
-from collections import namedtuple, deque
 
 import gym
 import numpy as np
@@ -15,7 +14,6 @@ from torch.distributions.categorical import Categorical
 from IPython.display import clear_output
 import matplotlib.pyplot as plt
 
-from common.misc_utils import one_hot, Transition, ReplayMemory
 from common.multiprocessing_env import ParallelEnv
 from algorithms.ppo import PPOAlgo
 
@@ -28,14 +26,13 @@ PPO_EPOCHS = 4
 MAX_FRAMES = 1e5
 T_STEPS = 128               # steps per process before updating
 MAX_GRAD_NORM = 0.5
-ENV_NAME = "MiniGrid-DoorKey-5x5-v0"   #MiniGrid-Empty-5x5-v0   MiniGrid-DoorKey-5x5-v0  #MiniGrid-SimpleCrossingS9N1-v0
+ENV_NAME = "MiniGrid-Empty-8x8-v0"   #MiniGrid-Empty-5x5-v0   MiniGrid-DoorKey-5x5-v0  #MiniGrid-SimpleCrossingS9N1-v0
 NUM_ENVS = 16
 
 use_cuda = torch.cuda.is_available()
 if use_cuda:
     device = "cuda"
     torch.set_default_tensor_type('torch.cuda.FloatTensor')
-batch_num = 0
 
 
 def init_params(m):
@@ -123,16 +120,14 @@ def test_env(acmodel, test_env, vis=False):
         if vis: test_env.render()
         total_reward += reward
     return total_reward
+
+def make_env(env_name, seed):
+    env = gym.make(env_name)
+    env.seed(seed)
+    return env
 ###########################################
 
 if __name__  ==  "__main__":
-    #####################################
-    
-    def make_env(env_name, seed):
-        env = gym.make(env_name)
-        env.seed(seed)
-        return env
-
     envs = [make_env(ENV_NAME, 1 + 10000*i) for i in range(NUM_ENVS)]
     print("Environments Loaded!\n")
     ########################################
@@ -145,7 +140,7 @@ if __name__  ==  "__main__":
     act_shape = env.action_space.n
     model = ActorCritic(embedding_size, act_shape).to(device)
     ###########################################
-    ppo = PPOAlgo(envs, model, device, T_STEPS, state_process)
+    ppo = PPOAlgo(envs, model, None, device, T_STEPS, state_process)
     frame_idx = 0
 
     while frame_idx < MAX_FRAMES:
@@ -154,5 +149,5 @@ if __name__  ==  "__main__":
         ppo.update_params(states_image, states_data, actions, values, log_probs, returns, advantages)
         frame_idx += T_STEPS * NUM_ENVS
 
-        test_reward = np.mean([test_env(model, env) for _ in range(10)])
+        test_reward = np.mean([test_env(model, env, False) for _ in range(10)])
         print(f'frames:{frame_idx}\tavg_rw:{test_reward}')
