@@ -138,7 +138,7 @@ if __name__  ==  "__main__":
     image_embedding_size = ((n-1)//2-2)*((m-1)//2-2)*64
     embedding_size = image_embedding_size + 2 + 2 + 1
     act_shape = env.action_space.n
-    model = ActorCritic(embedding_size, act_shape).to(device)
+    model = ActorCritic(embedding_size, act_shape-4).to(device)
     ###########################################
     ppo = PPOAlgo(envs, model, None, device, T_STEPS, state_process)
     frame_idx = 0

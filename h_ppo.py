@@ -26,9 +26,9 @@ TAU = 0.95                  # average parameter
 PPO_EPOCHS = 4
 MAX_FRAMES = int(1e5)
 T_STEPS = 128               # steps per process before updating
-L_STEPS = 10
+L_STEPS = 50
 MAX_GRAD_NORM = 0.5
-ENV_NAME = "MiniGrid-Empty-5x5-v0"   #MiniGrid-Empty-5x5-v0   MiniGrid-DoorKey-5x5-v0  #MiniGrid-SimpleCrossingS9N1-v0
+ENV_NAME = "MiniGrid-Empty-8x8-v0"   #MiniGrid-Empty-5x5-v0   MiniGrid-DoorKey-5x5-v0  #MiniGrid-SimpleCrossingS9N1-v0
 NUM_ENVS = 1
 DISCOUNT = 0.99
 GAE_LAMBDA = 0.95
@@ -107,10 +107,14 @@ def state_process(state, goal_pos, current_pos):
     image = state['image']
     return torch.Tensor(image).unsqueeze(0), torch.Tensor(s).unsqueeze(0)
 
+# def sub_goal_extract(n):
+#     x = n // 7
+#     y = n % 7
+#     return int(x - 3), int(y - 3)
 def sub_goal_extract(n):
-    x = n // 7
-    y = n % 7
-    return x - 3, y - 3
+    x = n // 5
+    y = n % 5
+    return int(x - 2), int(y - 2)
 
 def compute_gae(values, rewards, masks):
     gae = 0
@@ -137,7 +141,7 @@ def get_ppo_batch_index():
 
     return batches_starting_indexes
 
-def ppo_update(model, optimizer, states_image, states_data, actions, values, log_probs, returns, advantages):
+def ppo_update(model, image_net, optimizer, states_image, states_data, actions, values, log_probs, returns, advantages):
     for _ in range(PPO_EPOCHS):
         for indexs in get_ppo_batch_index():
             states_image_ = states_image[indexs]
@@ -165,7 +169,7 @@ def ppo_update(model, optimizer, states_image, states_data, actions, values, log
 
             optimizer.zero_grad()
             loss.backward()
-            # torch.nn.utils.clip_grad_norm_(list(model.parameters())+list(image_net.parameters()), MAX_GRAD_NORM)
+            torch.nn.utils.clip_grad_norm_(list(model.parameters())+list(image_net.parameters()), MAX_GRAD_NORM)
             optimizer.step()
 
 ########################################################
@@ -179,13 +183,14 @@ if __name__  ==  "__main__":
     act_shape = env.action_space.n
 
     image_net = ImageNet().to(device)
-    hl_model = ACModel(embedding_size, 49).to(device)
-    ll_model = ACModel(embedding_size, act_shape).to(device)
+    hl_model = ACModel(embedding_size, 25).to(device)
+    ll_model = ACModel(embedding_size, act_shape-4).to(device)
     hl_optimizer = torch.optim.Adam(list(hl_model.parameters())+list(image_net.parameters()), lr = 0.001, eps=1e-8)
     ll_optimizer = torch.optim.Adam(list(ll_model.parameters())+list(image_net.parameters()), lr = 0.001, eps=1e-8)
     #####################################################
     state = env.reset()
     avg_rw = deque(maxlen= 40)
+    avg_irw = deque(maxlen=40)
     n_frame = 0
     i_episode = 0
     episode_reward = 0
@@ -224,30 +229,42 @@ if __name__  ==  "__main__":
             sub_x, sub_y = sub_goal_extract(action.cpu().numpy())
             subgoal = np.array([sub_x, sub_y])
             subgoal_abs = env.agent_pos + np.array([sub_x, sub_y])
-
+            
+            print(f'check\tagent:{env.agent_pos}\tsubgoal:{subgoal_abs}\tgoal:{goal_pose}')
             while not done and np.any(env.agent_pos != subgoal_abs) and ll_t < L_STEPS:
                 image_processed_l, data_processed_l = state_process(state, subgoal, env.agent_pos)
                 with torch.no_grad():
                     dist_l, value_l = ll_model(image_processed_l, data_processed_l, image_net)
                 action_l = dist_l.sample()
+                saved_pose = env.agent_pos
                 next_state, reward, done, _ = env.step(action_l.cpu().numpy())
 
                 extrinsic_reward += reward
                 episode_reward += reward
-                intrinsic_reward = 1.0 if np.all(env.agent_pos == subgoal_abs) else 0.0
-                intrinsic_done = True if np.all(env.agent_pos == subgoal_abs) else False
+                subgoal = subgoal_abs - env.agent_pos
+                intrinsic_reward = np.linalg.norm(saved_pose - subgoal_abs) - np.linalg.norm(env.agent_pos - subgoal_abs)
+                if np.all(env.agent_pos == subgoal_abs):
+                    # print("sub done")
+                    # intrinsic_reward = 1.0
+                    intrinsic_done = True
+                else:
+                    # print(f'agent_pos:{env.agent_pos}\tgoal:{subgoal_abs}')
+                    # intrinsic_reward = 0.0
+                    intrinsic_done = False
 
                 log_prob_l = dist_l.log_prob(action_l)
                 log_probs_l.append(log_prob_l)
                 values_l.append(value_l)
                 rewards_l.append(torch.Tensor([intrinsic_reward]))
-                masks_l.append(torch.Tensor(1-np.stack([done])))
+                masks_l.append(torch.Tensor(1-np.stack([intrinsic_done])))
                 states_image_l.append(image_processed_l)
                 states_data_l.append(data_processed_l)
                 actions_l.append(action_l)
                 state = next_state
                 ll_t += 1
                 ll_update_counter += 1
+
+                avg_irw.append(intrinsic_reward)
 
                 #update lower network every T_STEPS
                 if ll_update_counter % T_STEPS == 0:
@@ -265,7 +282,7 @@ if __name__  ==  "__main__":
                     actions   = torch.cat(actions_l)
                     advantages = torch.cat(advantages)
 
-                    ppo_update(ll_model, ll_optimizer, states_image, states_data, actions, values, log_probs, returns, advantages)
+                    ppo_update(ll_model, image_net, ll_optimizer, states_image, states_data, actions, values, log_probs, returns, advantages)
 
                     log_probs_l = []
                     values_l = []
@@ -291,6 +308,9 @@ if __name__  ==  "__main__":
                 avg_rw.append(episode_reward)
                 episode_reward = 0
                 i_episode += 1
+                for grid in env.grid.grid:
+                    if grid is not None and grid.type == "goal":
+                        goal_pose = grid.cur_pos
 
         with torch.no_grad():
             next_image_processed, next_data_processed = state_process(next_state, goal_pose, env.agent_pos)
@@ -306,6 +326,6 @@ if __name__  ==  "__main__":
         actions   = torch.cat(actions_h)
         advantages = torch.cat(advantages)
 
-        ppo_update(hl_model, hl_optimizer, states_image, states_data, actions, values, log_probs, returns, advantages)
+        ppo_update(hl_model, image_net, hl_optimizer, states_image, states_data, actions, values, log_probs, returns, advantages)
 
-        print(f'episode:{i_episode}\tavg_rw:{np.mean(avg_rw)}')
+        print(f'episode:{i_episode}\tavg_rw:{np.mean(avg_rw)}\t avg_irw:{np.mean(avg_irw)}')
